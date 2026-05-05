@@ -4,6 +4,10 @@ import OpenAI from 'openai'
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
+async function wait(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 export async function POST(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -19,7 +23,6 @@ export async function POST(
     .single()
 
   if (error || !interview) {
-    console.error('Interview lookup error:', error)
     return NextResponse.json({ error: 'Interview not found', id, dbError: error?.message }, { status: 404 })
   }
 
@@ -27,36 +30,53 @@ export async function POST(
     return NextResponse.json({ error: 'No bot associated with this interview' }, { status: 400 })
   }
 
-  // Fetch transcript from Recall.ai
-  const recallRes = await fetch(`https://us-west-2.recall.ai/api/v2/bot/${interview.recall_bot_id}/transcript/`, {
+  const botId = interview.recall_bot_id
+
+  // Step 1: Trigger async transcription
+  const transcribeRes = await fetch(`https://us-west-2.recall.ai/api/v1/bot/${botId}/async_transcribe/`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Token ${process.env.RECALL_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ provider: { name: 'gladia' } }),
+  })
+
+  if (!transcribeRes.ok) {
+    const err = await transcribeRes.json()
+    console.error('Async transcription error:', err)
+    // Continue anyway — transcript might already exist
+  }
+
+  // Step 2: Wait for transcription to process
+  await wait(8000)
+
+  // Step 3: Fetch transcript
+  const transcriptRes = await fetch(`https://us-west-2.recall.ai/api/v2/bot/${botId}/transcript/`, {
     headers: {
       'Authorization': `Token ${process.env.RECALL_API_KEY}`,
     },
   })
 
-  if (!recallRes.ok) {
-    const err = await recallRes.json()
+  if (!transcriptRes.ok) {
+    const err = await transcriptRes.json()
     return NextResponse.json({ error: 'Failed to fetch transcript', details: err }, { status: 500 })
   }
 
-  const transcriptData = await recallRes.json()
+  const transcriptData = await transcriptRes.json()
 
   if (!Array.isArray(transcriptData) || transcriptData.length === 0) {
-    return NextResponse.json({ error: 'Transcript is empty. Make sure transcription is enabled in Recall.ai and that speech occurred during the call.' }, { status: 400 })
+    return NextResponse.json({ error: 'Transcript is empty. The transcription may still be processing — please try again in a minute.' }, { status: 400 })
   }
 
-  // Format transcript into readable text
+  // Step 4: Format transcript
   const transcriptText = transcriptData
     .map((entry: { speaker: string; words: { text: string }[] }) =>
       `${entry.speaker}: ${entry.words.map((w: { text: string }) => w.text).join(' ')}`
     )
     .join('\n')
 
-  if (!transcriptText.trim()) {
-    return NextResponse.json({ error: 'Transcript is empty. Make sure transcription is enabled in Recall.ai and that speech occurred during the call.' }, { status: 400 })
-  }
-
-  // Send to OpenAI for English evaluation
+  // Step 5: Send to OpenAI for English evaluation
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [
@@ -91,7 +111,7 @@ Provide your evaluation in the following JSON format:
 
   const report = JSON.parse(completion.choices[0].message.content || '{}')
 
-  // Save transcript and report to Supabase
+  // Step 6: Save everything to Supabase
   await supabase
     .from('interviews')
     .update({ transcript: transcriptText, report, status: 'completed' })
