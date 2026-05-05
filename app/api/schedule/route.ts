@@ -30,6 +30,10 @@ export async function POST(req: NextRequest) {
       meeting_url: meeting_link,
       bot_name: 'Zonora',
       join_at: new Date(scheduled_at).toISOString(),
+      real_time_transcription: {
+        destination_url: 'https://zonora.vercel.app/api/webhook/recall',
+        partial_results: false,
+      },
     }),
   })
 
