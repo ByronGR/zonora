@@ -59,7 +59,10 @@ export async function POST(req: NextRequest) {
           {
             type: 'webhook',
             url: webhookUrl,
-            events: ['transcript.data'],
+            events: [
+              'transcript.data',
+              'participant_events.speech_on',
+            ],
           },
         ],
       },
