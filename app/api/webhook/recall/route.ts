@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
   const supabase = createServerClient()
 
   const event = body.event as string | undefined
+  console.log('[webhook] Received event:', event, '| body keys:', Object.keys(body))
 
   // ── Bot status event (from Recall dashboard webhook) ───────────────────────
   if (event?.startsWith('bot.')) {

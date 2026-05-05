@@ -1,21 +1,25 @@
 import { createAdminClient } from './supabase-server'
 
-const VOICE_ID = '21m00Tcm4TlvDq8ikWAM' // ElevenLabs - Rachel (clear, professional)
+const VOICE_ID = 'ljX1ZrXuDIIRVcmiVSyR'
 
 export async function generateAndSpeak(
   botId: string,
   text: string,
   interviewId: string
 ): Promise<void> {
+  console.log(`[speak] Starting for bot ${botId}, interview ${interviewId}`)
+  console.log(`[speak] Text: "${text.slice(0, 80)}..."`)
+
   const supabase = createAdminClient()
 
   // Mark bot as speaking immediately so transcription events are ignored
   const wordCount = text.split(' ').length
-  const durationMs = Math.ceil((wordCount / 2.5) * 1000) + 5000 // words/sec + buffer
+  const durationMs = Math.ceil((wordCount / 2.5) * 1000) + 5000
   const speakingUntil = new Date(Date.now() + durationMs).toISOString()
   await supabase.from('interviews').update({ bot_speaking_until: speakingUntil }).eq('id', interviewId)
 
   // Generate audio with ElevenLabs
+  console.log('[speak] Calling ElevenLabs TTS...')
   const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
     method: 'POST',
     headers: {
@@ -32,14 +36,14 @@ export async function generateAndSpeak(
 
   if (!ttsRes.ok) {
     const err = await ttsRes.text()
-    console.error('ElevenLabs TTS failed:', err)
+    console.error('[speak] ElevenLabs TTS failed:', ttsRes.status, err)
     return
   }
+  console.log('[speak] ElevenLabs TTS success, uploading audio...')
 
   const audioBuffer = await ttsRes.arrayBuffer()
   const fileName = `${interviewId}/${Date.now()}.mp3`
 
-  // Upload to Supabase Storage (bucket: audio — must be public)
   const { error: uploadError } = await supabase.storage
     .from('audio')
     .upload(fileName, Buffer.from(audioBuffer), {
@@ -48,13 +52,15 @@ export async function generateAndSpeak(
     })
 
   if (uploadError) {
-    console.error('Storage upload failed:', uploadError)
+    console.error('[speak] Storage upload failed:', uploadError)
     return
   }
 
   const { data: { publicUrl } } = supabase.storage.from('audio').getPublicUrl(fileName)
+  console.log('[speak] Audio uploaded, public URL:', publicUrl)
 
   // Send audio to Recall.ai bot to play in the meeting
+  console.log('[speak] Calling Recall.ai output_media...')
   const recallRes = await fetch(
     `https://us-west-2.recall.ai/api/v1/bot/${botId}/output_media/`,
     {
@@ -69,6 +75,8 @@ export async function generateAndSpeak(
 
   if (!recallRes.ok) {
     const err = await recallRes.json()
-    console.error('Recall output_media failed:', err)
+    console.error('[speak] Recall output_media failed:', recallRes.status, JSON.stringify(err))
+  } else {
+    console.log('[speak] Recall output_media success — bot is speaking')
   }
 }
