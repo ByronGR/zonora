@@ -8,8 +8,6 @@ export async function generateAndSpeak(
   console.log(`[speak] Starting for bot ${botId}, interview ${interviewId}`)
   console.log(`[speak] Text: "${text.slice(0, 80)}..."`)
 
-  const supabase = createAdminClient()
-
   // Generate audio with OpenAI TTS
   console.log('[speak] Calling OpenAI TTS...')
   const ttsRes = await fetch('https://api.openai.com/v1/audio/speech', {
@@ -22,6 +20,7 @@ export async function generateAndSpeak(
       model: 'tts-1',
       voice: 'nova',
       input: text,
+      response_format: 'mp3',
     }),
   })
 
@@ -30,49 +29,35 @@ export async function generateAndSpeak(
     console.error('[speak] OpenAI TTS failed:', ttsRes.status, err)
     return
   }
-  console.log('[speak] OpenAI TTS success, uploading audio...')
+  console.log('[speak] OpenAI TTS success')
 
   const audioBuffer = await ttsRes.arrayBuffer()
-  const fileName = `${interviewId}/${Date.now()}.mp3`
+  const b64Audio = Buffer.from(audioBuffer).toString('base64')
 
-  const { error: uploadError } = await supabase.storage
-    .from('audio')
-    .upload(fileName, Buffer.from(audioBuffer), {
-      contentType: 'audio/mpeg',
-      upsert: true,
-    })
-
-  if (uploadError) {
-    console.error('[speak] Storage upload failed:', uploadError)
-    return
-  }
-
-  const { data: { publicUrl } } = supabase.storage.from('audio').getPublicUrl(fileName)
-  console.log('[speak] Audio uploaded, public URL:', publicUrl)
-
-  // Send audio to Recall.ai bot to play in the meeting
-  console.log('[speak] Calling Recall.ai output_media...')
+  // Send audio directly to Recall.ai bot via output_audio
+  console.log('[speak] Calling Recall.ai output_audio...')
   const recallRes = await fetch(
-    `https://us-west-2.recall.ai/api/v1/bot/${botId}/output_media/`,
+    `https://us-west-2.recall.ai/api/v1/bot/${botId}/output_audio/`,
     {
       method: 'POST',
       headers: {
         'Authorization': `Token ${process.env.RECALL_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ kind: 'audio', audio_url: publicUrl }),
+      body: JSON.stringify({ kind: 'mp3', b64_data: b64Audio }),
     }
   )
 
   if (!recallRes.ok) {
-    const err = await recallRes.json()
-    console.error('[speak] Recall output_media failed:', recallRes.status, JSON.stringify(err))
+    const err = await recallRes.json().catch(() => recallRes.text())
+    console.error('[speak] Recall output_audio failed:', recallRes.status, JSON.stringify(err))
     return
   }
 
-  console.log('[speak] Recall output_media success — bot is speaking')
+  console.log('[speak] Recall output_audio success — bot is speaking')
 
   // Mark bot as speaking AFTER audio is successfully queued
+  const supabase = createAdminClient()
   const wordCount = text.split(' ').length
   const durationMs = Math.ceil((wordCount / 2.5) * 1000) + 5000
   const speakingUntil = new Date(Date.now() + durationMs).toISOString()
