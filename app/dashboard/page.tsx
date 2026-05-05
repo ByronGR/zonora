@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming')
   const [form, setForm] = useState({
     candidate_name: '',
     candidate_email: '',
@@ -40,28 +41,65 @@ export default function Dashboard() {
     e.preventDefault()
     setLoading(true)
 
-    await supabase.from('interviews').insert([form])
-    await fetchInterviews()
+    const res = await fetch('/api/schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...form,
+        scheduled_at: new Date(form.scheduled_at).toISOString(),
+      }),
+    })
 
+    if (!res.ok) {
+      const errData = await res.json()
+      alert('Error: ' + JSON.stringify(errData))
+      setLoading(false)
+      return
+    }
+
+    await fetchInterviews()
     setForm({ candidate_name: '', candidate_email: '', meeting_link: '', scheduled_at: '' })
     setShowForm(false)
     setLoading(false)
   }
 
-  const today = interviews.filter(i => {
-    const d = new Date(i.scheduled_at)
-    const now = new Date()
-    return d.toDateString() === now.toDateString()
-  })
+  const now = new Date()
 
-  const completed = interviews.filter(i => i.status === 'completed')
-  const pending = interviews.filter(i => i.status === 'scheduled')
+  const upcoming = interviews.filter(i => new Date(i.scheduled_at) >= now)
+  const past = interviews.filter(i => new Date(i.scheduled_at) < now)
+  const todayCount = interviews.filter(i => {
+    const d = new Date(i.scheduled_at)
+    return d.toDateString() === now.toDateString()
+  }).length
 
   function formatDate(str: string) {
     return new Date(str).toLocaleString('en-US', {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
     })
   }
+
+  function InterviewRow({ interview }: { interview: Interview }) {
+    const isPast = new Date(interview.scheduled_at) < now
+    return (
+      <div className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition">
+        <div>
+          <p className="font-medium text-gray-900">{interview.candidate_name}</p>
+          <p className="text-sm text-gray-500">{interview.candidate_email}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-sm text-gray-700">{formatDate(interview.scheduled_at)}</p>
+          <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+            isPast ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-700'
+          }`}>
+            {isPast ? 'completed' : 'upcoming'}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  const displayed = tab === 'upcoming' ? upcoming : past
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -81,8 +119,8 @@ export default function Dashboard() {
       <div className="max-w-5xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">Good morning</h1>
-            <p className="text-gray-500">Here's what Zonora has scheduled for today.</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Dashboard</h1>
+            <p className="text-gray-500">Manage your Zonora interviews.</p>
           </div>
           <button
             onClick={() => setShowForm(true)}
@@ -96,49 +134,54 @@ export default function Dashboard() {
         <div className="grid grid-cols-3 gap-4 mb-8">
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <p className="text-sm text-gray-500 mb-1">Interviews Today</p>
-            <p className="text-3xl font-bold text-gray-900">{today.length}</p>
+            <p className="text-3xl font-bold text-gray-900">{todayCount}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <p className="text-sm text-gray-500 mb-1">Upcoming</p>
+            <p className="text-3xl font-bold text-gray-900">{upcoming.length}</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <p className="text-sm text-gray-500 mb-1">Completed</p>
-            <p className="text-3xl font-bold text-gray-900">{completed.length}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <p className="text-sm text-gray-500 mb-1">Pending</p>
-            <p className="text-3xl font-bold text-gray-900">{pending.length}</p>
+            <p className="text-3xl font-bold text-gray-900">{past.length}</p>
           </div>
         </div>
 
-        {/* Interview list */}
+        {/* Tabs + list */}
         <div className="bg-white rounded-xl border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900">Scheduled Interviews</h2>
+          <div className="px-6 pt-4 border-b border-gray-100 flex items-center gap-6">
+            <button
+              onClick={() => setTab('upcoming')}
+              className={`pb-3 text-sm font-semibold border-b-2 transition ${
+                tab === 'upcoming'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              Upcoming ({upcoming.length})
+            </button>
+            <button
+              onClick={() => setTab('past')}
+              className={`pb-3 text-sm font-semibold border-b-2 transition ${
+                tab === 'past'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              Past ({past.length})
+            </button>
           </div>
 
-          {interviews.length === 0 ? (
+          {displayed.length === 0 ? (
             <div className="px-6 py-12 text-center">
-              <p className="text-gray-400 text-sm">No interviews scheduled yet.</p>
-              <p className="text-gray-400 text-sm">Click "Schedule Interview" to get started.</p>
+              <p className="text-gray-400 text-sm">
+                {tab === 'upcoming'
+                  ? 'No upcoming interviews. Click "Schedule Interview" to add one.'
+                  : 'No past interviews yet.'}
+              </p>
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
-              {interviews.map(i => (
-                <div key={i.id} className="px-6 py-4 flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">{i.candidate_name}</p>
-                    <p className="text-sm text-gray-500">{i.candidate_email}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-700">{formatDate(i.scheduled_at)}</p>
-                    <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full font-medium ${
-                      i.status === 'completed'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-blue-100 text-blue-700'
-                    }`}>
-                      {i.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
+              {displayed.map(i => <InterviewRow key={i.id} interview={i} />)}
             </div>
           )}
         </div>
