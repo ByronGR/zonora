@@ -44,16 +44,9 @@ export async function POST(req: NextRequest) {
       meeting_url: meeting_link,
       bot_name: 'Zonora',
       join_at: new Date(scheduled_at).toISOString(),
-      real_time_transcription: {
-        destination_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zonora.vercel.app'}/api/webhook/recall`,
-        partial_results: false,
-      },
-      status_change_webhook: {
-        url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zonora.vercel.app'}/api/webhook/recall`,
-      },
       automatic_leave: {
-        waiting_room_timeout: 300,   // leave if no one joins in 5 min
-        everyone_left_timeout: 30,   // leave 30s after everyone else leaves
+        waiting_room_timeout: 300,
+        everyone_left_timeout: 30,
       },
     }),
   })
