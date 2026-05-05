@@ -1,5 +1,9 @@
 import { createAdminClient } from './supabase-server'
 
+// OpenAI shimmer voice speaks at roughly 3.5 words/sec at speed 1.15
+const WORDS_PER_SEC = 3.5
+const SPEAKING_BUFFER_MS = 1500
+
 export async function generateAndSpeak(
   botId: string,
   text: string,
@@ -8,8 +12,6 @@ export async function generateAndSpeak(
   console.log(`[speak] Starting for bot ${botId}, interview ${interviewId}`)
   console.log(`[speak] Text: "${text.slice(0, 80)}..."`)
 
-  // Generate audio with OpenAI TTS
-  console.log('[speak] Calling OpenAI TTS...')
   const ttsRes = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: {
@@ -21,6 +23,7 @@ export async function generateAndSpeak(
       voice: 'shimmer',
       input: text,
       response_format: 'mp3',
+      speed: 1.15,
     }),
   })
 
@@ -29,13 +32,10 @@ export async function generateAndSpeak(
     console.error('[speak] OpenAI TTS failed:', ttsRes.status, err)
     return
   }
-  console.log('[speak] OpenAI TTS success')
 
   const audioBuffer = await ttsRes.arrayBuffer()
   const b64Audio = Buffer.from(audioBuffer).toString('base64')
 
-  // Send audio directly to Recall.ai bot via output_audio
-  console.log('[speak] Calling Recall.ai output_audio...')
   const recallRes = await fetch(
     `https://us-west-2.recall.ai/api/v1/bot/${botId}/output_audio/`,
     {
@@ -56,10 +56,11 @@ export async function generateAndSpeak(
 
   console.log('[speak] Recall output_audio success — bot is speaking')
 
-  // Mark bot as speaking AFTER audio is successfully queued
+  // Block transcripts for the estimated speech duration only
   const supabase = createAdminClient()
   const wordCount = text.split(' ').length
-  const durationMs = Math.ceil((wordCount / 2.5) * 1000) + 5000
+  const durationMs = Math.ceil((wordCount / WORDS_PER_SEC) * 1000) + SPEAKING_BUFFER_MS
   const speakingUntil = new Date(Date.now() + durationMs).toISOString()
+  console.log(`[speak] Blocking transcripts for ${Math.round(durationMs / 1000)}s`)
   await supabase.from('interviews').update({ bot_speaking_until: speakingUntil }).eq('id', interviewId)
 }
