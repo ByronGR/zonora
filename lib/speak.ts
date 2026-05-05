@@ -1,7 +1,7 @@
 import { createAdminClient } from './supabase-server'
 
-// OpenAI shimmer voice speaks at roughly 3.5 words/sec at speed 1.15
-const WORDS_PER_SEC = 3.5
+// ElevenLabs turbo v2.5 — natural pacing ~3 words/sec
+const WORDS_PER_SEC = 3.0
 const SPEAKING_BUFFER_MS = 1500
 
 export async function generateAndSpeak(
@@ -12,24 +12,26 @@ export async function generateAndSpeak(
   console.log(`[speak] Starting for bot ${botId}, interview ${interviewId}`)
   console.log(`[speak] Text: "${text.slice(0, 80)}..."`)
 
-  const ttsRes = await fetch('https://api.openai.com/v1/audio/speech', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'tts-1-hd',
-      voice: 'shimmer',
-      input: text,
-      response_format: 'mp3',
-      speed: 1.15,
-    }),
-  })
+  const ttsRes = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${process.env.ELEVENLABS_VOICE_ID || 'ljX1ZrXuDIIRVcmiVSyR'}`,
+    {
+      method: 'POST',
+      headers: {
+        'xi-api-key': process.env.ELEVENLABS_API_KEY!,
+        'Content-Type': 'application/json',
+        'Accept': 'audio/mpeg',
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_turbo_v2_5',
+        voice_settings: { stability: 0.4, similarity_boost: 0.8, style: 0.2, use_speaker_boost: true },
+      }),
+    }
+  )
 
   if (!ttsRes.ok) {
     const err = await ttsRes.text()
-    console.error('[speak] OpenAI TTS failed:', ttsRes.status, err)
+    console.error('[speak] ElevenLabs TTS failed:', ttsRes.status, err)
     return
   }
 
@@ -56,7 +58,6 @@ export async function generateAndSpeak(
 
   console.log('[speak] Recall output_audio success — bot is speaking')
 
-  // Block transcripts for the estimated speech duration only
   const supabase = createAdminClient()
   const wordCount = text.split(' ').length
   const durationMs = Math.ceil((wordCount / WORDS_PER_SEC) * 1000) + SPEAKING_BUFFER_MS
