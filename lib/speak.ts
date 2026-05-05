@@ -1,6 +1,7 @@
 import { createAdminClient } from './supabase-server'
 
-const VOICE_ID = 'ljX1ZrXuDIIRVcmiVSyR'
+// Rachel — free ElevenLabs voice available on all plans
+const VOICE_ID = '21m00Tcm4TlvDq8ikWAM'
 
 export async function generateAndSpeak(
   botId: string,
@@ -11,12 +12,6 @@ export async function generateAndSpeak(
   console.log(`[speak] Text: "${text.slice(0, 80)}..."`)
 
   const supabase = createAdminClient()
-
-  // Mark bot as speaking immediately so transcription events are ignored
-  const wordCount = text.split(' ').length
-  const durationMs = Math.ceil((wordCount / 2.5) * 1000) + 5000
-  const speakingUntil = new Date(Date.now() + durationMs).toISOString()
-  await supabase.from('interviews').update({ bot_speaking_until: speakingUntil }).eq('id', interviewId)
 
   // Generate audio with ElevenLabs
   console.log('[speak] Calling ElevenLabs TTS...')
@@ -76,7 +71,14 @@ export async function generateAndSpeak(
   if (!recallRes.ok) {
     const err = await recallRes.json()
     console.error('[speak] Recall output_media failed:', recallRes.status, JSON.stringify(err))
-  } else {
-    console.log('[speak] Recall output_media success — bot is speaking')
+    return
   }
+
+  console.log('[speak] Recall output_media success — bot is speaking')
+
+  // Mark bot as speaking AFTER audio is successfully queued, so failed attempts don't block transcripts
+  const wordCount = text.split(' ').length
+  const durationMs = Math.ceil((wordCount / 2.5) * 1000) + 5000
+  const speakingUntil = new Date(Date.now() + durationMs).toISOString()
+  await supabase.from('interviews').update({ bot_speaking_until: speakingUntil }).eq('id', interviewId)
 }
