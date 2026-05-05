@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase-server'
+import { createAdminClient } from '@/lib/supabase-server'
 import { generateAndSpeak } from '@/lib/speak'
 import OpenAI from 'openai'
 
@@ -15,34 +15,46 @@ async function leaveCall(botId: string) {
   })
 }
 
-async function playIntro(botId: string, interview: Record<string, unknown>) {
+// Returns true if this handler "won" the intro lock, false if another handler already played it
+async function claimAndPlayIntro(botId: string, interview: Record<string, unknown>): Promise<boolean> {
+  const supabase = createAdminClient()
   const name = (interview.candidate_name as string) || 'there'
   const role = interview.job_title ? ` for the ${interview.job_title as string} position` : ''
   const intro = `Hello ${name}, I'm Zonora, an AI interviewer. I'll be conducting a short assessment today${role}. This will take about 5 to 10 minutes. To start, could you tell me a little about yourself and your professional background?`
 
   const history: Turn[] = [{ role: 'bot', content: intro, timestamp: new Date().toISOString() }]
-  const supabase = createServerClient()
-  await supabase.from('interviews').update({ conversation_history: history, bot_status: 'in_call' }).eq('id', interview.id)
+
+  // Atomic update: only succeeds if bot_status is still 'scheduled' or null — prevents double intro
+  const { data: updated } = await supabase
+    .from('interviews')
+    .update({ conversation_history: history, bot_status: 'in_call' })
+    .eq('id', interview.id)
+    .neq('bot_status', 'in_call')
+    .select()
+    .single()
+
+  if (!updated) {
+    console.log('[webhook] Intro already claimed by another handler, skipping')
+    return false
+  }
+
   await generateAndSpeak(botId, intro, interview.id as string)
+  return true
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const supabase = createServerClient()
+  const supabase = createAdminClient()
 
   const event = body.event as string | undefined
   console.log('[webhook] event:', event, '| keys:', Object.keys(body))
 
   // ── participant_events.speech_on — candidate starts speaking ───────────────
-  // Used as intro trigger: first time we detect any participant speaking,
-  // Zonora plays its greeting before the transcript even arrives.
   if (event === 'participant_events.speech_on') {
     const botId = body.data?.bot?.id
     const participant = body.data?.data?.participant
 
     if (!botId) return NextResponse.json({ received: true })
-
-    // Ignore the bot's own audio being picked up
     if (participant?.name === 'Zonora') return NextResponse.json({ received: true })
 
     const { data: interview } = await supabase
@@ -53,12 +65,9 @@ export async function POST(req: NextRequest) {
 
     if (!interview) return NextResponse.json({ received: true })
 
-    // Only play intro once — if conversation_history is empty
-    const history: Turn[] = interview.conversation_history || []
-    const botHasSpoken = history.some(t => t.role === 'bot')
-    if (!botHasSpoken) {
+    if (interview.bot_status !== 'in_call') {
       console.log('[webhook] First speech detected — playing intro')
-      await playIntro(botId, interview)
+      await claimAndPlayIntro(botId, interview)
     }
 
     return NextResponse.json({ received: true })
@@ -77,11 +86,9 @@ export async function POST(req: NextRequest) {
 
     if (!interview) return NextResponse.json({ received: true })
 
-    const history: Turn[] = interview.conversation_history || []
-    const botHasSpoken = history.some(t => t.role === 'bot')
-    if (!botHasSpoken) {
+    if (interview.bot_status !== 'in_call') {
       console.log('[webhook] bot.in_call_recording — playing intro')
-      await playIntro(botId, interview)
+      await claimAndPlayIntro(botId, interview)
     }
 
     return NextResponse.json({ received: true })
@@ -101,11 +108,13 @@ export async function POST(req: NextRequest) {
     const botId = body.data?.bot?.id
     const words: { text: string }[] | undefined = body.data?.data?.words
     const participant = body.data?.data?.participant
+    const isFinal: boolean = body.data?.data?.is_final ?? true
 
     if (!botId || !words || words.length === 0) return NextResponse.json({ received: true })
-
-    // Filter out bot's own transcribed audio
     if (participant?.name === 'Zonora') return NextResponse.json({ received: true })
+
+    // Only process complete utterances, not streaming partials
+    if (!isFinal) return NextResponse.json({ received: true })
 
     const { data: interview } = await supabase
       .from('interviews')
@@ -124,19 +133,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const candidateText = words.map(w => w.text).join(' ').trim()
+    const candidateText = words.map((w: { text: string }) => w.text).join(' ').trim()
     if (!candidateText || candidateText.length < 3) return NextResponse.json({ received: true })
 
     console.log('[webhook] Candidate said:', candidateText.slice(0, 100))
 
     const history: Turn[] = interview.conversation_history || []
 
-    // If intro hasn't been played yet, play it first then bail —
-    // the candidate's words will be handled on the next transcript event
-    const botHasSpoken = history.some(t => t.role === 'bot')
-    if (!botHasSpoken) {
+    // If intro hasn't been played yet, play it first
+    if (interview.bot_status !== 'in_call') {
       console.log('[webhook] No intro yet — playing intro before responding')
-      await playIntro(botId, interview)
+      await claimAndPlayIntro(botId, interview)
       return NextResponse.json({ received: true })
     }
 
@@ -161,6 +168,7 @@ RULES:
 - No markdown or formatting.
 - No filler words like "certainly", "absolutely", "great question".
 - Ask one focused question per turn.
+- Wait for the candidate to fully finish before responding.
 - Turn ${botTurnCount + 1} of ${MAX_BOT_TURNS}. On turn ${MAX_BOT_TURNS}, wrap up and say goodbye.`
 
       const messages = [
@@ -194,7 +202,5 @@ RULES:
     return NextResponse.json({ received: true })
   }
 
-  // Unknown event — log and ignore
-  console.log('[webhook] Unhandled event:', event, JSON.stringify(body).slice(0, 200))
   return NextResponse.json({ received: true })
 }
