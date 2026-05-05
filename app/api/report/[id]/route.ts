@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import OpenAI from 'openai'
+import { toFile } from 'openai'
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
@@ -23,7 +24,7 @@ export async function POST(
     .single()
 
   if (error || !interview) {
-    return NextResponse.json({ error: 'Interview not found', id, dbError: error?.message }, { status: 404 })
+    return NextResponse.json({ error: 'Interview not found' }, { status: 404 })
   }
 
   if (!interview.recall_bot_id) {
@@ -32,57 +33,52 @@ export async function POST(
 
   const botId = interview.recall_bot_id
 
-  // Step 1: Trigger async transcription
-  const transcribeRes = await fetch(`https://us-west-2.recall.ai/api/v1/bot/${botId}/async_transcribe/`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Token ${process.env.RECALL_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ provider: { name: 'gladia' } }),
+  // Step 1: Get bot details including video URL from Recall.ai
+  const botRes = await fetch(`https://us-west-2.recall.ai/api/v1/bot/${botId}/`, {
+    headers: { 'Authorization': `Token ${process.env.RECALL_API_KEY}` },
   })
 
-  if (!transcribeRes.ok) {
-    const err = await transcribeRes.json()
-    console.error('Async transcription error:', err)
-    // Continue anyway — transcript might already exist
+  if (!botRes.ok) {
+    const err = await botRes.json()
+    return NextResponse.json({ error: 'Failed to fetch bot details', details: err }, { status: 500 })
   }
 
-  // Step 2: Wait for transcription to process
-  await wait(8000)
+  const botData = await botRes.json()
+  const videoUrl = botData?.video_url || botData?.recordings?.[0]?.media_shortcuts?.video_mixed?.data?.download_url
 
-  // Step 3: Fetch transcript
-  const transcriptRes = await fetch(`https://us-west-2.recall.ai/api/v2/bot/${botId}/transcript/`, {
-    headers: {
-      'Authorization': `Token ${process.env.RECALL_API_KEY}`,
-    },
+  if (!videoUrl) {
+    return NextResponse.json({ error: 'No video recording found for this bot. The bot may not have recorded the call.' }, { status: 400 })
+  }
+
+  // Step 2: Download the video
+  const videoRes = await fetch(videoUrl)
+  if (!videoRes.ok) {
+    return NextResponse.json({ error: 'Failed to download recording' }, { status: 500 })
+  }
+
+  const videoBuffer = await videoRes.arrayBuffer()
+  const videoFile = await toFile(Buffer.from(videoBuffer), 'recording.mp4', { type: 'video/mp4' })
+
+  // Step 3: Transcribe with Whisper
+  const transcription = await openai.audio.transcriptions.create({
+    file: videoFile,
+    model: 'whisper-1',
+    language: 'en',
   })
 
-  if (!transcriptRes.ok) {
-    const err = await transcriptRes.json()
-    return NextResponse.json({ error: 'Failed to fetch transcript', details: err }, { status: 500 })
+  const transcriptText = transcription.text
+
+  if (!transcriptText.trim()) {
+    return NextResponse.json({ error: 'Transcript is empty. No speech was detected in the recording.' }, { status: 400 })
   }
 
-  const transcriptData = await transcriptRes.json()
-
-  if (!Array.isArray(transcriptData) || transcriptData.length === 0) {
-    return NextResponse.json({ error: 'Transcript is empty. The transcription may still be processing — please try again in a minute.' }, { status: 400 })
-  }
-
-  // Step 4: Format transcript
-  const transcriptText = transcriptData
-    .map((entry: { speaker: string; words: { text: string }[] }) =>
-      `${entry.speaker}: ${entry.words.map((w: { text: string }) => w.text).join(' ')}`
-    )
-    .join('\n')
-
-  // Step 5: Send to OpenAI for English evaluation
+  // Step 4: Send to GPT-4o for English evaluation
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [
       {
         role: 'system',
-        content: `You are an expert English language evaluator specializing in CEFR assessment for professional hiring contexts. Analyze the candidate's speech from a job interview transcript and provide a structured evaluation. Focus only on the candidate's speech, not the interviewer. Be objective, fair, and specific with examples from the transcript.`
+        content: `You are an expert English language evaluator specializing in CEFR assessment for professional hiring contexts. Analyze the candidate's speech from a job interview transcript and provide a structured evaluation. Focus only on the candidate's speech. Be objective, fair, and specific with examples from the transcript.`
       },
       {
         role: 'user',
@@ -111,7 +107,7 @@ Provide your evaluation in the following JSON format:
 
   const report = JSON.parse(completion.choices[0].message.content || '{}')
 
-  // Step 6: Save everything to Supabase
+  // Step 5: Save to Supabase
   await supabase
     .from('interviews')
     .update({ transcript: transcriptText, report, status: 'completed' })
