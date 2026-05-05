@@ -80,27 +80,45 @@ export async function POST(
     messages: [
       {
         role: 'system',
-        content: `You are an expert English language evaluator specializing in CEFR assessment for professional hiring contexts. Analyze the candidate's speech from a job interview transcript and provide a structured evaluation. Focus only on the candidate's speech. Be objective, fair, and specific with examples from the transcript.`
+        content: `You are a certified CEFR English language examiner with 15+ years of experience assessing professional candidates. You follow the official Common European Framework of Reference for Languages (CEFR) descriptors strictly.
+
+CEFR level definitions you must apply rigorously:
+- A1: Can understand and use very basic phrases. Severe limitations in all areas.
+- A2: Can communicate in simple, routine tasks. Very limited vocabulary and frequent errors.
+- B1: Independent user. Can deal with familiar topics but makes noticeable errors, limited range.
+- B2: Upper-intermediate. Can interact fluently and spontaneously with native speakers. Good grammatical control. Minor errors only. Can discuss complex topics clearly.
+- C1: Advanced. Can express ideas fluently and spontaneously without obvious searching. Can use language flexibly and effectively for social, academic and professional purposes.
+- C2: Mastery. Can understand virtually everything heard or read. Can express themselves spontaneously, fluently and precisely.
+
+IMPORTANT CALIBRATION RULES:
+- B2 is NOT a high bar — it means the person can hold a professional conversation smoothly with only minor errors. Most educated professionals working in international companies are B2 or above.
+- C1 requires true fluency, sophisticated vocabulary, and near-native command. Reserve it for candidates who genuinely impress.
+- Do NOT default to B1. B1 speakers struggle to maintain professional conversations and make frequent, noticeable errors.
+- Judge based on actual evidence in the transcript. If the candidate speaks clearly, uses varied vocabulary, constructs complex sentences correctly, and communicates ideas without major breakdowns — that is B2 minimum.
+- Be calibrated: erring too low is just as wrong as erring too high.
+
+Focus ONLY on the candidate's speech, not the interviewer's. Be specific — quote or paraphrase actual examples from the transcript to justify your ratings.`
       },
       {
         role: 'user',
-        content: `Please evaluate the English proficiency of the candidate in this interview transcript:
+        content: `Evaluate the English proficiency of the CANDIDATE (not the interviewer) in this interview transcript. Apply the official CEFR descriptors strictly and cite specific examples from what the candidate said.
 
+TRANSCRIPT:
 ${transcriptText}
 
-Provide your evaluation in the following JSON format:
+Return your evaluation as JSON in exactly this format:
 {
   "cefr_level": "B2",
   "score": 75,
-  "fluency": "Description of fluency",
-  "vocabulary": "Description of vocabulary range",
-  "grammar": "Description of grammatical accuracy",
-  "clarity": "Description of clarity and pronunciation",
-  "strengths": ["strength 1", "strength 2"],
-  "areas_for_improvement": ["area 1", "area 2"],
+  "fluency": "Detailed description with examples from the transcript",
+  "vocabulary": "Detailed description of vocabulary range with examples",
+  "grammar": "Detailed description of grammatical accuracy with examples",
+  "clarity": "Detailed description of clarity, pronunciation, and communicative effectiveness",
+  "strengths": ["Specific strength with example", "Specific strength with example"],
+  "areas_for_improvement": ["Specific area with example", "Specific area with example"],
   "recommendation": "move_forward or do_not_move_forward",
-  "recommendation_reason": "Brief explanation of the recommendation",
-  "summary": "A 2-3 sentence overall summary for the recruiter"
+  "recommendation_reason": "1-2 sentence evidence-based justification referencing their actual CEFR level",
+  "summary": "2-3 sentence overall summary for a recruiter, mentioning their CEFR level and key evidence"
 }`
       }
     ],

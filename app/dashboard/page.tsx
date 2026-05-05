@@ -1,21 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-
-type Report = {
-  cefr_level: string
-  score: number
-  fluency: string
-  vocabulary: string
-  grammar: string
-  clarity: string
-  strengths: string[]
-  areas_for_improvement: string[]
-  recommendation: string
-  recommendation_reason: string
-  summary: string
-}
 
 type Interview = {
   id: string
@@ -25,17 +12,16 @@ type Interview = {
   scheduled_at: string
   status: string
   recall_bot_id: string | null
-  report: Report | null
+  report: Record<string, unknown> | null
 }
 
 export default function Dashboard() {
   const supabase = createClient()
+  const router = useRouter()
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming')
-  const [selectedReport, setSelectedReport] = useState<Interview | null>(null)
-  const [generatingId, setGeneratingId] = useState<string | null>(null)
   const [form, setForm] = useState({
     candidate_name: '',
     candidate_email: '',
@@ -81,24 +67,6 @@ export default function Dashboard() {
     setLoading(false)
   }
 
-  async function handleGenerateReport(interview: Interview) {
-    setGeneratingId(interview.id)
-    try {
-      const res = await fetch(`/api/report/${interview.id}`, { method: 'POST' })
-      const text = await res.text()
-      const data = text ? JSON.parse(text) : {}
-
-      if (!res.ok) {
-        alert('Error generating report: ' + JSON.stringify(data))
-      } else {
-        await fetchInterviews()
-      }
-    } catch (err) {
-      alert('Error: ' + err)
-    }
-    setGeneratingId(null)
-  }
-
   const now = new Date()
   const upcoming = interviews.filter(i => new Date(i.scheduled_at) >= now)
   const past = interviews.filter(i => new Date(i.scheduled_at) < now)
@@ -119,7 +87,10 @@ export default function Dashboard() {
     const hasReport = !!interview.report
 
     return (
-      <div className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition">
+      <div
+        onClick={() => router.push(`/dashboard/interviews/${interview.id}`)}
+        className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition cursor-pointer"
+      >
         <div>
           <p className="font-medium text-gray-900">{interview.candidate_name}</p>
           <p className="text-sm text-gray-500">{interview.candidate_email}</p>
@@ -134,24 +105,9 @@ export default function Dashboard() {
               {hasReport ? 'report ready' : isPast ? 'completed' : 'upcoming'}
             </span>
           </div>
-          {isPast && (
-            hasReport ? (
-              <button
-                onClick={() => setSelectedReport(interview)}
-                className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition font-medium"
-              >
-                View Report
-              </button>
-            ) : (
-              <button
-                onClick={() => handleGenerateReport(interview)}
-                disabled={generatingId === interview.id}
-                className="text-sm bg-gray-800 hover:bg-gray-900 text-white px-3 py-1.5 rounded-lg transition font-medium disabled:opacity-60"
-              >
-                {generatingId === interview.id ? 'Generating...' : 'Generate Report'}
-              </button>
-            )
-          )}
+          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
         </div>
       </div>
     )
@@ -282,76 +238,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Report modal */}
-      {selectedReport && selectedReport.report && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 px-4 py-8">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-full overflow-y-auto p-8">
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">{selectedReport.candidate_name}</h2>
-                <p className="text-gray-500 text-sm">{selectedReport.candidate_email}</p>
-              </div>
-              <button onClick={() => setSelectedReport(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
-            </div>
-
-            {/* CEFR Score */}
-            <div className={`rounded-xl p-5 mb-6 ${
-              selectedReport.report.recommendation === 'move_forward' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
-            }`}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-3xl font-bold text-gray-900">{selectedReport.report.cefr_level}</span>
-                <span className={`text-sm font-semibold px-3 py-1 rounded-full ${
-                  selectedReport.report.recommendation === 'move_forward' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
-                }`}>
-                  {selectedReport.report.recommendation === 'move_forward' ? 'Move Forward' : 'Do Not Move Forward'}
-                </span>
-              </div>
-              <p className="text-gray-700 text-sm">{selectedReport.report.summary}</p>
-            </div>
-
-            {/* Scores */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              {[
-                { label: 'Fluency', value: selectedReport.report.fluency },
-                { label: 'Vocabulary', value: selectedReport.report.vocabulary },
-                { label: 'Grammar', value: selectedReport.report.grammar },
-                { label: 'Clarity', value: selectedReport.report.clarity },
-              ].map(item => (
-                <div key={item.label} className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{item.label}</p>
-                  <p className="text-sm text-gray-700">{item.value}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Strengths */}
-            <div className="mb-4">
-              <p className="text-sm font-semibold text-gray-700 mb-2">Strengths</p>
-              <ul className="space-y-1">
-                {selectedReport.report.strengths.map((s, i) => (
-                  <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
-                    <span className="text-green-500 mt-0.5">✓</span>{s}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Areas for improvement */}
-            <div className="mb-6">
-              <p className="text-sm font-semibold text-gray-700 mb-2">Areas for Improvement</p>
-              <ul className="space-y-1">
-                {selectedReport.report.areas_for_improvement.map((a, i) => (
-                  <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
-                    <span className="text-orange-400 mt-0.5">→</span>{a}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <p className="text-xs text-gray-400 text-center">Generated by Zonora · Powered by Nearwork</p>
-          </div>
-        </div>
-      )}
     </main>
   )
 }
