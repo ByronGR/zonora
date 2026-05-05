@@ -1,9 +1,5 @@
 import { createAdminClient } from './supabase-server'
 
-// ElevenLabs turbo v2.5 — natural pacing ~3 words/sec
-const WORDS_PER_SEC = 3.0
-const SPEAKING_BUFFER_MS = 1500
-
 export async function generateAndSpeak(
   botId: string,
   text: string,
@@ -58,10 +54,7 @@ export async function generateAndSpeak(
 
   console.log('[speak] Recall output_audio success — bot is speaking')
 
+  // Record when the bot started speaking — used only for logging/analytics, not blocking
   const supabase = createAdminClient()
-  const wordCount = text.split(' ').length
-  const durationMs = Math.ceil((wordCount / WORDS_PER_SEC) * 1000) + SPEAKING_BUFFER_MS
-  const speakingUntil = new Date(Date.now() + durationMs).toISOString()
-  console.log(`[speak] Blocking transcripts for ${Math.round(durationMs / 1000)}s`)
-  await supabase.from('interviews').update({ bot_speaking_until: speakingUntil }).eq('id', interviewId)
+  await supabase.from('interviews').update({ bot_speaking_until: new Date().toISOString() }).eq('id', interviewId)
 }

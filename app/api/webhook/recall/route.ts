@@ -121,26 +121,7 @@ export async function POST(req: NextRequest) {
     const candidateText = words.map((w: { text: string }) => w.text).join(' ').trim()
     if (!candidateText || candidateText.length < 3) return NextResponse.json({ received: true })
 
-    // If bot is still speaking, save the message so we don't lose it
-    if (interview.bot_speaking_until) {
-      const until = new Date(interview.bot_speaking_until).getTime()
-      if (Date.now() < until) {
-        console.log('[webhook] Bot still speaking — saving pending transcript:', candidateText.slice(0, 60))
-        await supabase.from('interviews').update({ pending_transcript: candidateText }).eq('id', interview.id)
-        return NextResponse.json({ received: true })
-      }
-    }
-
-    // Check if there's a saved transcript from when bot was speaking — use it if no new text
-    let textToProcess = candidateText
-    if (interview.pending_transcript && candidateText.toLowerCase() !== interview.pending_transcript.toLowerCase()) {
-      // Combine pending + new, or just use whichever is more meaningful
-      textToProcess = candidateText.length >= interview.pending_transcript.length
-        ? candidateText
-        : interview.pending_transcript
-    }
-    // Clear pending transcript
-    await supabase.from('interviews').update({ pending_transcript: null }).eq('id', interview.id)
+    const textToProcess = candidateText
 
     console.log('[webhook] Candidate said:', textToProcess.slice(0, 120))
 
