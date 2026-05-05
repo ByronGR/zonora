@@ -23,7 +23,7 @@ async function claimAndPlayIntro(botId: string, interview: Record<string, unknow
   const name = (interview.candidate_name as string) || 'there'
   const role = interview.job_title ? ` for the ${interview.job_title as string} position` : ''
 
-  const intro = `Hi ${name}! Welcome, and thank you so much for taking the time today. My name is Zonora and I'll be your interviewer${role}. Before we get started, I just want to let you know this is a relaxed conversation — there are no trick questions, and I genuinely want to hear your story. This should take around 30 minutes. Does that sound good to you, and are you ready to begin?`
+  const intro = `Hi ${name}, welcome! I'm Zonora, your AI interviewer from Nearwork${role}. This is just a relaxed conversation — no trick questions, I genuinely want to hear your story. So to get us started, tell me a little about yourself and your professional background. What have you been working on lately?`
 
   const history: Turn[] = [{ role: 'bot', content: intro, timestamp: new Date().toISOString() }]
 
