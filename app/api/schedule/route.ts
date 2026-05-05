@@ -44,6 +44,13 @@ export async function POST(req: NextRequest) {
       meeting_url: meeting_link,
       bot_name: 'Zonora',
       join_at: new Date(scheduled_at).toISOString(),
+      transcription_options: {
+        provider: 'gladia',
+        gladia: {
+          destination_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zonora.vercel.app'}/api/webhook/recall`,
+          partial_results: false,
+        },
+      },
       automatic_leave: {
         waiting_room_timeout: 300,
         everyone_left_timeout: 30,
