@@ -1,8 +1,5 @@
 import { createAdminClient } from './supabase-server'
 
-// Rachel — free ElevenLabs voice available on all plans
-const VOICE_ID = '21m00Tcm4TlvDq8ikWAM'
-
 export async function generateAndSpeak(
   botId: string,
   text: string,
@@ -13,28 +10,27 @@ export async function generateAndSpeak(
 
   const supabase = createAdminClient()
 
-  // Generate audio with ElevenLabs
-  console.log('[speak] Calling ElevenLabs TTS...')
-  const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
+  // Generate audio with OpenAI TTS
+  console.log('[speak] Calling OpenAI TTS...')
+  const ttsRes = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: {
-      'xi-api-key': process.env.ELEVENLABS_API_KEY!,
+      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
-      'Accept': 'audio/mpeg',
     },
     body: JSON.stringify({
-      text,
-      model_id: 'eleven_turbo_v2_5',
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      model: 'tts-1',
+      voice: 'nova',
+      input: text,
     }),
   })
 
   if (!ttsRes.ok) {
     const err = await ttsRes.text()
-    console.error('[speak] ElevenLabs TTS failed:', ttsRes.status, err)
+    console.error('[speak] OpenAI TTS failed:', ttsRes.status, err)
     return
   }
-  console.log('[speak] ElevenLabs TTS success, uploading audio...')
+  console.log('[speak] OpenAI TTS success, uploading audio...')
 
   const audioBuffer = await ttsRes.arrayBuffer()
   const fileName = `${interviewId}/${Date.now()}.mp3`
@@ -76,7 +72,7 @@ export async function generateAndSpeak(
 
   console.log('[speak] Recall output_media success — bot is speaking')
 
-  // Mark bot as speaking AFTER audio is successfully queued, so failed attempts don't block transcripts
+  // Mark bot as speaking AFTER audio is successfully queued
   const wordCount = text.split(' ').length
   const durationMs = Math.ceil((wordCount / 2.5) * 1000) + 5000
   const speakingUntil = new Date(Date.now() + durationMs).toISOString()

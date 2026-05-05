@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-server'
 
-const VOICE_ID = '21m00Tcm4TlvDq8ikWAM'
-
 // Diagnostics endpoint — tests each step of the speak pipeline individually
 // POST /api/test-speak  body: { bot_id, interview_id, text? }
 export async function POST(req: NextRequest) {
@@ -15,28 +13,23 @@ export async function POST(req: NextRequest) {
   const message = text || 'Hello, this is a test of the Zonora voice system.'
   const results: Record<string, unknown> = {}
 
-  // Step 1: ElevenLabs TTS
-  const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
+  // Step 1: OpenAI TTS
+  const ttsRes = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: {
-      'xi-api-key': process.env.ELEVENLABS_API_KEY!,
+      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
-      'Accept': 'audio/mpeg',
     },
-    body: JSON.stringify({
-      text: message,
-      model_id: 'eleven_turbo_v2_5',
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-    }),
+    body: JSON.stringify({ model: 'tts-1', voice: 'nova', input: message }),
   })
 
   if (!ttsRes.ok) {
     const err = await ttsRes.text()
     results.tts = { ok: false, status: ttsRes.status, error: err }
-    return NextResponse.json({ step_failed: 'elevenlabs_tts', results })
+    return NextResponse.json({ step_failed: 'openai_tts', results })
   }
 
-  results.tts = { ok: true, status: ttsRes.status, content_type: ttsRes.headers.get('content-type') }
+  results.tts = { ok: true, status: ttsRes.status }
 
   // Step 2: Supabase Storage upload
   const supabase = createAdminClient()
