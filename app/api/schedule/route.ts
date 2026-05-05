@@ -49,7 +49,9 @@ export async function POST(req: NextRequest) {
       recording_config: {
         transcript: {
           provider: {
-            gladia_v2_streaming: {},
+            gladia_v2_streaming: {
+                endpointing: 2000,
+              },
           },
           diarization: {
             use_separate_streams_when_available: true,

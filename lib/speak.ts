@@ -18,7 +18,7 @@ export async function generateAndSpeak(
     },
     body: JSON.stringify({
       model: 'tts-1-hd',
-      voice: 'nova',
+      voice: 'shimmer',
       input: text,
       response_format: 'mp3',
     }),
