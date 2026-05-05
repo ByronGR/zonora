@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://zonora.vercel.app'}/api/webhook/recall`
+
   const recallRes = await fetch('https://us-west-2.recall.ai/api/v1/bot/', {
     method: 'POST',
     headers: {
@@ -44,12 +46,22 @@ export async function POST(req: NextRequest) {
       meeting_url: meeting_link,
       bot_name: 'Zonora',
       join_at: new Date(scheduled_at).toISOString(),
-      transcription_options: {
-        provider: 'gladia',
-        gladia: {
-          destination_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zonora.vercel.app'}/api/webhook/recall`,
-          partial_results: false,
+      recording_config: {
+        transcript: {
+          provider: {
+            gladia_v2_streaming: {},
+          },
+          diarization: {
+            use_separate_streams_when_available: true,
+          },
         },
+        realtime_endpoints: [
+          {
+            type: 'webhook',
+            url: webhookUrl,
+            events: ['transcript.data'],
+          },
+        ],
       },
       automatic_leave: {
         waiting_room_timeout: 300,
