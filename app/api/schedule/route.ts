@@ -3,14 +3,29 @@ import { createServerClient } from '@/lib/supabase-server'
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { candidate_name, candidate_email, meeting_link, scheduled_at } = body
+  const {
+    candidate_name,
+    candidate_email,
+    meeting_link,
+    scheduled_at,
+    job_title,
+    job_description,
+    custom_questions,
+  } = body
 
   const supabase = createServerClient()
 
-  // Save to Supabase
   const { data: interview, error } = await supabase
     .from('interviews')
-    .insert([{ candidate_name, candidate_email, meeting_link, scheduled_at }])
+    .insert([{
+      candidate_name,
+      candidate_email,
+      meeting_link,
+      scheduled_at,
+      job_title: job_title || null,
+      job_description: job_description || null,
+      custom_questions: custom_questions || [],
+    }])
     .select()
     .single()
 
@@ -19,7 +34,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Send bot to meeting via Recall.ai
   const recallRes = await fetch('https://us-west-2.recall.ai/api/v1/bot/', {
     method: 'POST',
     headers: {
@@ -31,7 +45,7 @@ export async function POST(req: NextRequest) {
       bot_name: 'Zonora',
       join_at: new Date(scheduled_at).toISOString(),
       real_time_transcription: {
-        destination_url: 'https://zonora.vercel.app/api/webhook/recall',
+        destination_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://zonora.vercel.app'}/api/webhook/recall`,
         partial_results: false,
       },
     }),
@@ -44,10 +58,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Recall.ai error', details: recallData }, { status: 500 })
   }
 
-  // Save the Recall bot ID to the interview record
   await supabase
     .from('interviews')
-    .update({ recall_bot_id: recallData.id })
+    .update({ recall_bot_id: recallData.id, bot_status: 'scheduled' })
     .eq('id', interview.id)
 
   return NextResponse.json({ success: true, interview, bot: recallData })

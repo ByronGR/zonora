@@ -28,6 +28,8 @@ export default function Dashboard() {
     candidate_email: '',
     meeting_link: '',
     scheduled_at: '',
+    job_title: '',
+    job_description: '',
   })
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export default function Dashboard() {
     }
 
     await fetchInterviews()
-    setForm({ candidate_name: '', candidate_email: '', meeting_link: '', scheduled_at: '' })
+    setForm({ candidate_name: '', candidate_email: '', meeting_link: '', scheduled_at: '', job_title: '', job_description: '' })
     setShowForm(false)
     setLoading(false)
   }
@@ -210,22 +212,37 @@ export default function Dashboard() {
 
       {/* Schedule form modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 px-4 py-8">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-full overflow-y-auto p-8">
             <h2 className="text-xl font-bold text-gray-900 mb-1">Schedule Interview</h2>
-            <p className="text-gray-500 text-sm mb-6">Zonora will automatically join this meeting.</p>
+            <p className="text-gray-500 text-sm mb-6">Zonora will join and conduct the interview automatically.</p>
             <form onSubmit={handleSchedule} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Candidate Name</label>
+                  <input type="text" placeholder="Maria Garcia" value={form.candidate_name}
+                    onChange={e => setForm({ ...form, candidate_name: e.target.value })} required
+                    className="w-full px-4 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Candidate Email</label>
+                  <input type="email" placeholder="maria@email.com" value={form.candidate_email}
+                    onChange={e => setForm({ ...form, candidate_email: e.target.value })} required
+                    className="w-full px-4 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+                </div>
+              </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Candidate Name</label>
-                <input type="text" placeholder="Maria Garcia" value={form.candidate_name}
-                  onChange={e => setForm({ ...form, candidate_name: e.target.value })} required
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Job Title</label>
+                <input type="text" placeholder="Senior Software Engineer" value={form.job_title}
+                  onChange={e => setForm({ ...form, job_title: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Candidate Email</label>
-                <input type="email" placeholder="maria@email.com" value={form.candidate_email}
-                  onChange={e => setForm({ ...form, candidate_email: e.target.value })} required
-                  className="w-full px-4 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Job Description <span className="text-gray-400 font-normal">(Zonora will ask relevant questions)</span></label>
+                <textarea placeholder="Paste the job description here..." value={form.job_description}
+                  onChange={e => setForm({ ...form, job_description: e.target.value })}
+                  rows={4}
+                  className="w-full px-4 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Meeting Link</label>
