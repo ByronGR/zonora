@@ -64,8 +64,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true })
   }
 
-  // ── bot.* status events (from Recall dashboard webhook) ───────────────────
-  if (event?.startsWith('bot.')) {
+  // ── bot.in_call_recording — bot joined and is recording ───────────────────
+  if (event === 'bot.in_call_recording') {
     const botId = body.data?.bot?.id
     if (!botId) return NextResponse.json({ received: true })
 
@@ -77,22 +77,22 @@ export async function POST(req: NextRequest) {
 
     if (!interview) return NextResponse.json({ received: true })
 
-    const code = body.data?.status?.code
-    console.log('[webhook] bot status code:', code)
-
-    if (code === 'in_call_recording') {
-      const history: Turn[] = interview.conversation_history || []
-      const botHasSpoken = history.some(t => t.role === 'bot')
-      if (!botHasSpoken) {
-        console.log('[webhook] Bot joined — playing intro')
-        await playIntro(botId, interview)
-      }
+    const history: Turn[] = interview.conversation_history || []
+    const botHasSpoken = history.some(t => t.role === 'bot')
+    if (!botHasSpoken) {
+      console.log('[webhook] bot.in_call_recording — playing intro')
+      await playIntro(botId, interview)
     }
 
-    if (code === 'done') {
-      await supabase.from('interviews').update({ bot_status: 'done' }).eq('id', interview.id)
-    }
+    return NextResponse.json({ received: true })
+  }
 
+  // ── bot.done — bot has left ────────────────────────────────────────────────
+  if (event === 'bot.done') {
+    const botId = body.data?.bot?.id
+    if (botId) {
+      await supabase.from('interviews').update({ bot_status: 'done' }).eq('recall_bot_id', botId)
+    }
     return NextResponse.json({ received: true })
   }
 
