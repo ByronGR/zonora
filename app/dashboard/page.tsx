@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming')
   const [form, setForm] = useState({
     candidate_name: '',
@@ -135,12 +136,27 @@ export default function Dashboard() {
             <h1 className="text-2xl font-bold text-gray-900 mb-1">Dashboard</h1>
             <p className="text-gray-500">Manage your Zonora interviews.</p>
           </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition"
-          >
-            + Schedule Interview
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.origin + '/book')
+                setCopied(true)
+                setTimeout(() => setCopied(false), 2000)
+              }}
+              className="border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-4 py-2.5 rounded-lg transition flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              {copied ? 'Copied!' : 'Copy Candidate Link'}
+            </button>
+            <button
+              onClick={() => setShowForm(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition"
+            >
+              + Schedule Interview
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mb-8">
